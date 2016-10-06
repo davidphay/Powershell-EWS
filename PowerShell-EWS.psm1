@@ -1,4 +1,5 @@
 ﻿
+
 function Connect-EWS {
 <#
 	.SYNOPSIS
@@ -216,7 +217,7 @@ function Get-EWSFolder {
 		Exchange 2013
 	
 	.NOTES
-		Additional information about the function.
+		Next release : Return Folder ID
 #>
 	
 	[CmdletBinding(ConfirmImpact = 'None')]
@@ -698,6 +699,429 @@ function Get-EWSCalendar {
 	}
 }
 
+function Get-EWSCalendarPermission {
+<#
+	.SYNOPSIS
+		A brief description of the Get-EWSPermission function.
+	
+	.DESCRIPTION
+		A detailed description of the Get-EWSPermission function.
+	
+	.PARAMETER Path
+		Enter the path of the folder
+	
+	.PARAMETER WellKnownFolderName
+		must remove some validateset ?
+	
+	.PARAMETER Details
+		To show full details
+	
+	.PARAMETER Service
+		Call Connect-EWS function
+	
+	.EXAMPLE
+		PS C:\> Get-EWSPermission -Service $service
+		
+		Name                       DisplayPermissionLevel
+		----                       ----------------------
+		Default                                  Reviewer
+		Anonymous                        FreeBusyTimeOnly
+	
+	.EXAMPLE
+		PS C:\> Get-EWSPermission -Service $service -Details
+		
+		Name             : Default
+		PermissionLevel  : Reviewer
+		Read             : FullDetails
+		Edit             : None
+		CreateItems      : False
+		CreateSubFolders : False
+		DeleteItems      : None
+		FolderOwner      : False
+		FolderContact    : False
+		FolderVisible    : True
+		
+		Name             : Anonymous
+		PermissionLevel  : FreeBusyTimeOnly
+		Read             : TimeOnly
+		Edit             : None
+		CreateItems      : False
+		CreateSubFolders : False
+		DeleteItems      : None
+		FolderOwner      : False
+		FolderContact    : False
+		FolderVisible    : False
+		
+	.VERSION
+		1.0.0 - First version
+	
+	.NOTES
+		For more information about advanced functions, call Get-Help with any
+		of the topics in the links listed below.
+#>
+	
+	[CmdletBinding(ConfirmImpact = 'None')]
+	param
+	(
+		[Parameter(Mandatory = $false)]
+		[Switch]$Details,
+		[Parameter(Mandatory = $true)]
+		[Microsoft.Exchange.WebServices.Data.ExchangeServiceBase]$Service
+	)
+	
+	Begin {
+		Try {
+			$Permissions = @()
+			# Get all the folders in the message's root folder.
+			$rootFolderId = New-Object Microsoft.Exchange.WebServices.Data.FolderId([Microsoft.Exchange.WebServices.Data.WellKnownFolderName]::Calendar)
+			$folder = [Microsoft.Exchange.WebServices.Data.Folder]::Bind($Service, $rootFolderId)
+			
+		} Catch {
+			Write-Error -Message $_.Exception.Message -ErrorAction Stop
+		}
+	}
+	Process {
+		Try {
+			# On folder you can have many persmission
+			$folder.Permissions | ForEach-Object{
+				If ($_.UserId.PrimarySmtpAddress) {
+					$Name = $_.UserId.PrimarySmtpAddress
+				} else {
+					$Name = $_.UserId.StandardUser.ToString()
+				}
+				$_ | Add-Member NoteProperty -Name Name -Value $Name -Force
+				
+				$Permissions += $_
+			}
+		} Catch {
+			Throw [System.SystemException]$_.Exception.Message
+		}
+	}
+	End {
+		Try {
+			if ($Details) {
+				Return $Permissions
+			} Else {
+				Return $Permissions | Select-Object Name, DisplayPermissionLevel
+			}
+		} Catch {
+			Throw [System.SystemException]$_.Exception.Message
+		}
+	}
+}
+
+function Set-EWSCalendarPermission {
+<#
+	.SYNOPSIS
+		Define the level permission for a user or a group
+	
+	.DESCRIPTION
+		Define the level permission for a user or a group
+	
+	.PARAMETER UserAdress
+		ets the identifier of the user that the permission applies to. 
+	
+	.PARAMETER Permissionlevel
+		Sets the permission level. 
+	
+	.PARAMETER Service
+		Call Connect-EWS function
+	
+	.PARAMETER Force
+		A description of the Force parameter.
+	
+	.PARAMETER WhatIf
+		Shows what would happen if the cmdlet runs. The cmdlet is not run.
+	
+	.PARAMETER CanCreateItems
+		Gets or sets a value that indicates whether the user can create new items. 
+	
+	.PARAMETER CanCreateSubFolders
+		Sets a value that indicates whether the user can create subfolders. 
+	
+	.PARAMETER IsFolderOwner
+		Sets a value that indicates whether the user owns the folder. 
+	
+	.PARAMETER IsFolderVisible
+		Sets a value that indicates whether the folder is visible to the user. 
+	
+	.PARAMETER IsFolderContact
+		Sets a value that indicates whether the user is a contact for the folder. 
+	
+	.PARAMETER EditItems
+		Sets a value that indicates whether the user can edit existing items. 
+	
+	.PARAMETER DeleteItems
+		Sets a value that indicates whether the user can delete existing items. 
+	
+	.PARAMETER ReadItems
+		Sets the read items access permission. 
+	
+	.EXAMPLE
+		PS C:\> Set-EWSCalendarPermission -UserAdress email@address.com -Permissionlevel Editor -Service $service
+		
+		.VERSION
+		1.0.0 - First version
+		1.1.0 - Add Custom Permission
+	
+	.NOTES
+		https://msdn.microsoft.com/en-us/library/office/dn641962(v=exchg.150).aspx
+		https://msdn.microsoft.com/en-us/library/microsoft.exchange.webservices.data.folderpermission_properties(v=exchg.80).aspx
+#>
+	
+	[CmdletBinding(DefaultParameterSetName = 'PermissionLevel',
+				   ConfirmImpact = 'Medium')]
+	param
+	(
+		[Parameter(Mandatory = $true)]
+		[System.String]$UserAdress,
+		[Parameter(ParameterSetName = 'PermissionLevel',
+				   Mandatory = $true)]
+		[Microsoft.Exchange.WebServices.Data.FolderPermissionLevel]$Permissionlevel,
+		[Parameter(Mandatory = $true)]
+		[Microsoft.Exchange.WebServices.Data.ExchangeServiceBase]$Service,
+		[Switch]$Force,
+		[Switch]$WhatIf,
+		[Parameter(ParameterSetName = 'CustomPermission')]
+		[Boolean]$CanCreateItems,
+		[Parameter(ParameterSetName = 'CustomPermission')]
+		[Boolean]$CanCreateSubFolders,
+		[Parameter(ParameterSetName = 'CustomPermission')]
+		[Boolean]$IsFolderOwner,
+		[Parameter(ParameterSetName = 'CustomPermission')]
+		[Boolean]$IsFolderVisible,
+		[Parameter(ParameterSetName = 'CustomPermission')]
+		[Boolean]$IsFolderContact,
+		[Parameter(ParameterSetName = 'CustomPermission')]
+		[Microsoft.Exchange.WebServices.Data.PermissionScope]$EditItems,
+		[Parameter(ParameterSetName = 'CustomPermission')]
+		[Microsoft.Exchange.WebServices.Data.PermissionScope]$DeleteItems,
+		[Parameter(ParameterSetName = 'CustomPermission')]
+		[Microsoft.Exchange.WebServices.Data.FolderPermissionReadAccess]$ReadItems
+	)
+	
+	Begin {
+		Try {
+			# Get all the folders in the message's root folder.
+			$rootFolderId = New-Object Microsoft.Exchange.WebServices.Data.FolderId([Microsoft.Exchange.WebServices.Data.WellKnownFolderName]::Calendar)
+			$folder = [Microsoft.Exchange.WebServices.Data.Folder]::Bind($Service, $rootFolderId)
+		} Catch {
+			Write-Error -Message $_.Exception.Message -ErrorAction Stop
+		}
+	}
+	Process {
+		Try {
+			$folder.Permissions | ForEach-Object{
+				If ($_.UserId.PrimarySmtpAddress) {
+					$Name = $_.UserId.PrimarySmtpAddress
+				} else {
+					$Name = $_.UserId.StandardUser.ToString()
+				}
+				
+				if ($Name -eq $UserAdress) {
+					if ($_.PermissionLevel -eq $Permissionlevel) {
+						$Status = 0
+						Return $Status | Out-Null
+					} else {
+						$Status = 1
+						$perm = $_
+						Return $Status | Out-Null
+					}
+				}
+			}
+		} Catch {
+			Write-Error -Message $_.Exception.Message -ErrorAction Stop
+		}
+	}
+	End {
+		Try {
+			# If Status :
+			# = 0 => User and permission still exist
+			# = 1 => User exist but the permission level is different
+			# Default => User not exist
+			switch ($status) {
+				'0' {
+					# the new permission level is the same
+					Write-Warning "The Permission still exist for this user"
+					Return
+				}
+				'1'{
+					if (!$Force) {
+						Write-Host "The Force parameter was not specified. If you continue, the permission level will be updated. Are you sure you want to continue?"
+						do {
+							$return = Read-Host "[Y] Yes  [N] No (default is 'Y')"
+						} until ($return -eq "Y" -or $return -eq "N")
+						
+						
+						switch ($return) {
+							'N'{
+								Return
+							}
+						}
+					}
+					
+					# the new permission is different
+					# Apply new permission
+					Write-Warning "The existing permission will be overriding"
+					Write-Debug "Remove existing Permission"
+					$folder.Permissions.Remove($perm) | Out-Null
+				}
+				default {
+					# User have no permission... Create new permission
+					Write-Debug "Create the permission for $UserAdress"
+				}
+			}
+			
+			If (!$WhatIf) {
+				if ($PSCmdlet.ParameterSetName -ne "CustomPermission") {
+					$NewPermission = New-Object Microsoft.Exchange.WebServices.Data.FolderPermission($UserAddress, $Permissionlevel)
+				} Else {
+					$NewPermission = New-Object Microsoft.Exchange.WebServices.Data.FolderPermission
+					$NewPermission.UserId = $UserAddress
+					
+					if ($CanCreateItems) {
+						$NewPermission.CanCreateItems = $CanCreateItems
+					}
+					if ($CanCreateSubFolders) {
+						$NewPermission.CanCreateSubFolders = $CanCreateSubFolders
+					}
+					if ($IsFolderOwner) {
+						$NewPermission.IsFolderOwner = $IsFolderOwner
+					}
+					if ($IsFolderVisible) {
+						$NewPermission.IsFolderVisible = $IsFolderVisible
+					}
+					if ($IsFolderContact) {
+						$NewPermission.IsFolderContact = $IsFolderContact
+					}
+					if ($DeleteItems) {
+						$NewPermission.DeleteItems = $DeleteItems
+					}
+					if ($ReadItems) {
+						$NewPermission.ReadItems = $ReadItems
+					}
+					if ($EditItems) {
+						$NewPermission.EditItems = $EditItems
+					}
+					
+				}
+				$folder.Permissions.Add($NewPermission)
+				$folder.Update()
+			} Else {
+				Write-Host "What if: Performing the operation `"Set-EWSCalendarPermission`" for $UserAddress on current mailbox"
+			}
+		} Catch [System.Management.Automation.MethodInvocationException]{
+			Throw [system.ArgumentException] "User was nor valid"
+		} Catch {
+			Write-Error -Message $_.Exception.Message -ErrorAction Stop
+		}
+	}
+}
+
+function Remove-EWSCalendarPermission {
+<#
+	.SYNOPSIS
+		A brief description of the Remove-EWSCalendarPermission function.
+	
+	.DESCRIPTION
+		A detailed description of the Remove-EWSCalendarPermission function.
+	
+	.PARAMETER UserAddress
+		A description of the UserAddress parameter.
+	
+	.PARAMETER Service
+		Call Connect-EWS function
+	
+	.PARAMETER Force
+		Force the cmdlet
+	
+	.PARAMETER WhatIf
+		Shows what would happen if the cmdlet runs. The cmdlet is not run.
+	
+	.PARAMETER UserAdress
+		Define the user
+	
+	.EXAMPLE
+		PS C:\> Remove-EWSCalendarPermission -UserAddress email@address.com -Service $service
+	
+	.EXAMPLE
+		PS C:\> Remove-EWSCalendarPermission -UserAddress email@address.com -Service $service -Force
+		
+	.VERSION
+		1.0.0 - First version
+	
+	.NOTES
+		For more information about advanced functions, call Get-Help with any
+		of the topics in the links listed below.
+#>
+	
+	[CmdletBinding(ConfirmImpact = 'Medium')]
+	param
+	(
+		[Parameter(Mandatory = $true)]
+		[String]$UserAddress,
+		[Parameter(Mandatory = $true)]
+		[Microsoft.Exchange.WebServices.Data.ExchangeServiceBase]$Service,
+		[Switch]$Force,
+		[Switch]$WhatIf
+	)
+	
+	Begin {
+		Try {
+			# Get all the folders in the message's root folder.
+			$rootFolderId = New-Object Microsoft.Exchange.WebServices.Data.FolderId([Microsoft.Exchange.WebServices.Data.WellKnownFolderName]::Calendar)
+			$folder = [Microsoft.Exchange.WebServices.Data.Folder]::Bind($Service, $rootFolderId)
+		} Catch {
+			Write-Error -Message $_.Exception.Message -ErrorAction Stop
+		}
+	}
+	Process {
+		Try {
+			$folder.Permissions | ForEach-Object{
+				If ($_.UserId.PrimarySmtpAddress) {
+					$Name = $_.UserId.PrimarySmtpAddress
+				} else {
+					$Name = $_.UserId.StandardUser.ToString()
+				}
+				
+				if ($Name -eq $UserAdress) {
+					Write-Host "User found"
+					$perm = $_
+				}
+			}
+		} Catch {
+			Write-Error -Message $_.Exception.Message -ErrorAction Stop
+		}
+	}
+	End {
+		Try {
+			if (!$Force) {
+				Write-Host "The Force parameter was not specified. If you continue, the user permission will be removed. Are you sure you want to continue?"
+				do {
+					$return = Read-Host "[Y] Yes  [N] No (default is 'Y')"
+				} until ($return -eq "Y" -or $return -eq "N")
+				
+				
+				switch ($return) {
+					'N' {
+						Return
+					}
+				}
+			}
+			
+			if (!$WhatIf) {
+				Write-Debug "Remove User permission"
+				$folder.Permissions.Remove($perm) | Out-Null
+				$folder.update()
+			} Else {
+				Write-Host "What if: Performing the operation `"Remove-EWSCalendarPermission`" for $UserAddress on current mailbox"
+			}
+		} Catch {
+			Write-Error -Message $_.Exception.Message -ErrorAction Stop
+		}
+	}
+}
+
 function Get-EWSMeeting {
 <#
 	.SYNOPSIS
@@ -1172,5 +1596,8 @@ Export-ModuleMember -Function Connect-EWS,
 					Move-EWSMail,
 					Remove-EWSMail,
 					Get-EWSCalendar,
+					Get-EWSCalendarPermission,
+					Set-EWSCalendarPermission,
+					Remove-EWSCalendarPermission,
 					Get-EWSMeeting,
 					New-EWSMeeting
