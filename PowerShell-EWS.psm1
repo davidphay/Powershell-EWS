@@ -1,5 +1,4 @@
 ﻿
-
 function Connect-EWS {
 <#
 	.SYNOPSIS
@@ -21,12 +20,12 @@ function Connect-EWS {
 	.PARAMETER ServerVersion
 		Define ServerVersion if AutoDetect failed.
 		Possible value:
-			Exchange2007_SP1
-			Exchange2010
-			Exchange2010_SP1
-			Exchange2010_SP2
-			Exchange2013
-			Exchange2013_SP1
+		Exchange2007_SP1
+		Exchange2010
+		Exchange2010_SP1
+		Exchange2010_SP2
+		Exchange2013
+		Exchange2013_SP1
 	
 	.PARAMETER EwsUrl
 		Define EWS Url if AutoDetect failed
@@ -44,14 +43,19 @@ function Connect-EWS {
 		PS C:\> $cred = New-Object -TypeName PSObject -Property $credentials
 		PS C:\> Connect-EWS -UserMailAddress $email -Credential $cred
 		
-	.VERSION
+		.VERSION
 		1.0.0 - 2016.08.09
-			Initial version
-	
+		Initial version
+		
 		1.1.0 - 2016.09.28
-			Change download EWS url
-
-	.VALIDATION
+		Change download EWS url
+		
+		2.0.0 - 2016.10.06
+		Credential param is now [PSCredential]
+		To define Credential Just call Get-Credential
+		If UserMailAddress 
+		
+		.VALIDATION
 		Exchange 2013
 	
 	.OUTPUTS
@@ -60,9 +64,11 @@ function Connect-EWS {
 	.NOTES
 		Additional information about the function.
 #>
-	Param
+	
+	param
 	(
-		[Parameter(ValueFromPipeline = $true)]
+		[Parameter(Mandatory = $true,
+				   ValueFromPipeline = $true)]
 		[ValidatePattern('^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,4}$|^AutoDetect$')]
 		[Alias('MailAddress')]
 		[String]$UserMailAddress,
@@ -73,7 +79,8 @@ function Connect-EWS {
 		[ValidatePattern('^https?://[^/]*/ews/exchange.asmx$|^AutoDetect$')]
 		[Alias('Url')]
 		[String]$EwsUrl = "AutoDetect",
-		[PSObject]$Credential
+		[Parameter(Mandatory = $true)]
+		[PSCredential]$Credential
 	)
 	
 	Begin {
@@ -90,6 +97,11 @@ function Connect-EWS {
 				}
 			}
 			
+			if (!$UserMailAddress) {
+				$sid = [System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+				$UserMailAddress = [ADSI]"LDAP://<SID=$sid>"
+			}
+			
 			# initializing EWS ExchangeService
 			If ($ServerVersion -eq "AutoDetect") {
 				Write-Debug -Message "ServerVersion is AutoDetect"
@@ -103,9 +115,10 @@ function Connect-EWS {
 			Write-Debug -Message "UserAgent: $($ExchangeService.UserAgent)"
 			
 			# Define Credential
-			$ExchangeService.Credentials = New-Object System.Net.NetworkCredential -ArgumentList $Credential.UserName, $Credential.Password, $Credential.Domain
+			$ExchangeService.Credentials = New-Object System.Net.NetworkCredential($Credential.UserName.ToString(), $Credential.GetNetworkCredential().password.ToString())
 			Write-Debug -Message "Credentials: $($ExchangeService.Credentials.Credentials.UserName)"
 		} Catch {
+			Write-Warning $_.Exception.GetType().FullName;
 			Throw [System.SystemException]$_.Exception.Message
 		}
 	}
@@ -132,7 +145,7 @@ function Connect-EWS {
 				Write-Error -Message "Email addresse does not exist($UserMailAddress)"
 				Throw [System.InvalidOperationException] "Email address does not exist"
 			} Else {
-				Throw [System.SystemException] $_.Exception.Message
+				Throw [System.SystemException]$_.Exception.Message
 			}
 		}
 	}
@@ -153,10 +166,10 @@ function Connect-EWS {
 				$url = ($ErrorMessage -split "'")[1]
 				Throw [System.IO.IOException] "The remote name could not be resolved ($url)"
 			} Else {
-				Throw [System.SystemException] $_.Exception.Message
+				Throw [System.SystemException]$_.Exception.Message
 			}
 		} Catch {
-			Throw [System.SystemException] $_.Exception.Message
+			Throw [System.SystemException]$_.Exception.Message
 		}
 	}
 }
@@ -1249,7 +1262,7 @@ function Get-EWSMeeting {
 function New-EWSMeeting {
 <#
 	.SYNOPSIS
-		A brief description of the New-MeetingEWS function.
+		Create a meeting in calendar through EWS
 	
 	.DESCRIPTION
 		A detailed description of the New-MeetingEWS function.
@@ -1258,69 +1271,68 @@ function New-EWSMeeting {
 		Call Connect-EWS function
 	
 	.PARAMETER Subject
-		A description of the Subject parameter.
+		Define the subject appointement (mandatory)
 	
 	.PARAMETER Body
-		A description of the Body parameter.
+		Define the Body
 	
 	.PARAMETER StartDate
-		Define the start period must be checked
+		Define the start period
 	
 	.PARAMETER EndDate
-		Define the end period must be checked
+		Define the end period
 	
 	.PARAMETER Location
-		A description of the Location parameter.
+		Add a location to the meeting
 	
 	.PARAMETER RequiredAttendees
-		A description of the RequiredAttendees parameter.
+		Add required attendees
 	
 	.PARAMETER OptionalAttendees
-		A description of the OptionalAttendees parameter.
+		Add optional attendee
 	
-	.PARAMETER ImpersonateMailboxName
-		A description of the ImpersonateMailboxName parameter.
+	.PARAMETER ImpersonateMailbox
+		If you need to connect another calendar (if impersonation is enable, is different of Delegation right)
 	
-	.PARAMETER Recurrence
-		A description of the Recurrence parameter.
+	.PARAMETER DelegationMailbox
+		If you need to connect another calendar (you must have the correct right)
 	
 	.PARAMETER Frequency
-		A description of the Frequency parameter.
+		Define the frequency of the reccurence. 
 	
 	.PARAMETER Every
-		A description of the Every parameter.
+		Recurence param
 	
 	.PARAMETER EveryWeekDay
-		A description of the EveryWeekDay parameter.
+		Recurence param (can be used only with Daily frequency)
 	
 	.PARAMETER Day
-		A description of the Day parameter.
+		Recurence param (can be used only with Weekly, Monthly & Yearly frequency)
 	
 	.PARAMETER Week
-		A description of the Week parameter.
+		Recurence param (can be used only with Monthly & Yearly frequency)
 	
 	.PARAMETER DayNumber
-		A description of the DayNumber parameter.
+		Recurence param (can be used only with Weekly, Monthly & Yearly frequency)
 	
 	.PARAMETER OfMonth
-		A description of the OfMonth parameter.
+		Recurence param (can be used only with Yearly frequency)
 	
 	.PARAMETER RecurrenceStart
-		A description of the RecurrenceStart parameter.
+		Define the start of the recurrence
 	
 	.PARAMETER NoEndDate
-		A description of the NoEndDate parameter.
+		The series has no end.
 	
 	.PARAMETER EndAfterOccurence
-		A description of the EndAfterOccurence parameter.
+		The value of this property or element specifies the number of occurrences.
 	
 	.PARAMETER EndBy
-		A description of the EndBy parameter.
+		The last occurrence in the series falls on or before the date specified by this property or element.
 	
-	.PARAMETER MailboxName
-		specify the mailbox that you want to connect to a user account. You can use the followind values to identify the mailbox:
-		email address
-	
+	.PARAMETER AllDay
+		Use this param if the appointement during all day
+
 	.EXAMPLE
 		PS C:\> New-MeetingEWS -MailboxName "myemail@mydomain.com" -Service $Service
 	
@@ -1331,6 +1343,14 @@ function New-EWSMeeting {
 		
 	.VERSION
 		1.0.0 - Initial version
+	
+		1.1.0 - Change test for yearly frequency
+				Change test to define if DayNumber param is called
+
+		2.0.0 - Add DelegationMailbox to add meeting in another mailbox
+	
+		2.1.0 - Correct some bug with Week param
+				Remove Reccurse Parm
 		
 	.VALIDATION
 		Exchange 2013
@@ -1339,8 +1359,9 @@ function New-EWSMeeting {
 		https://msdn.microsoft.com/en-us/library/office/dd633694(v=exchg.80).aspx
 		https://msdn.microsoft.com/en-us/library/office/dn727655(v=exchg.150).aspx
 #>
+	
 	[CmdletBinding(DefaultParameterSetName = 'Yearly')]
-	Param
+	param
 	(
 		[Parameter(Mandatory = $true)]
 		[Microsoft.Exchange.WebServices.Data.ExchangeServiceBase]$Service,
@@ -1352,8 +1373,9 @@ function New-EWSMeeting {
 		[String]$Location,
 		[Array]$RequiredAttendees,
 		[Array]$OptionalAttendees,
-		[System.Net.Mail.MailAddress]$ImpersonateMailboxName,
-		[Switch]$Recurrence,
+		[System.Net.Mail.MailAddress]$ImpersonateMailbox,
+		[System.Net.Mail.MailAddress]$DelegationMailbox,
+		[ValidateSet('Daily', 'Weekly', 'Monthly', 'Yearly')]
 		[String]$Frequency,
 		[Parameter(ParameterSetName = 'Daily')]
 		[Parameter(ParameterSetName = 'Weekly')]
@@ -1400,11 +1422,11 @@ function New-EWSMeeting {
 	)
 	
 	Begin {
-		Try {
+		Try {			
 			# Test part
 			switch ($Frequency) {
 				'Daily' {
-					if ($EveryWeekDay -and $Every) {
+					if ($EveryWeekDay -and $Every -gt 1) {
 						Throw [system.ArgumentException] "With Daily frequency you cannot set EveryWeekDay and Every param at the same time, choose only one"
 					}
 					if ($Day -or $Week -or $DayNumber -or $OfMonth) {
@@ -1414,7 +1436,7 @@ function New-EWSMeeting {
 				'Weekly' {
 					if ($EveryWeekDay) {
 						Throw [system.ArgumentException] "You cannot use EveryWeekDay with Weekly frequency, use Day param and define 'Weekday'"
-					} elseif ($Week -or $DayNumber -or $OfMonth) {
+					} elseif ($Week -or ($DayNumber -gt 0) -or $OfMonth) {
 						Throw [system.ArgumentException] "With weekly frequency, you cannot set one of the following param: Week, DayNumber or OfMonth"
 					}
 				}
@@ -1426,12 +1448,12 @@ function New-EWSMeeting {
 					}
 					
 					if ($Week) {
-						if ($DayNumber) {
+						if ($DayNumber -gt 0) {
 							Throw [system.ArgumentException] "With Monthly frequency you cannot set Week and DayNumber param same time, choose only one"
 						} elseif (!$Day) {
 							Throw [system.ArgumentException] "With Week Param, you must define Day param"
 						}
-					} elseif ($DayNumber) {
+					} elseif ($DayNumber -gt 0) {
 						if ($Week -or $Day) {
 							Throw [system.ArgumentException] "With Monthly frequency you cannot set Week/Day and DayNumber param same time, choose only one"
 						}
@@ -1441,14 +1463,14 @@ function New-EWSMeeting {
 					if (!$OfMonth) {
 						Throw [system.ArgumentException] "OfMonth param is mandatory"
 					} Elseif ($Week -or $Day) {
-						if ($DayNumber) {
+						if ($DayNumber -gt 0) {
 							Throw [system.ArgumentException] "With Yearly frequency you cannot set Week and DayNumber param same time, choose only one"
-						} elseif (!$Day) {
+						} elseif ([string]::IsNullOrEmpty($Day)) {
 							Throw [system.ArgumentException] "With Week Param, you must define Day param"
-						} elseif (!$Week) {
+						} elseif ([string]::IsNullOrEmpty($Week)) {
 							Throw [system.ArgumentException] "With Day Param, you must define Week param"
 						}
-					} elseif ($DayNumber) {
+					} elseif ($DayNumber -gt 0) {
 						if ($Week -or $Day) {
 							Throw [system.ArgumentException] "With Yearly frequency you cannot set Week/Day and DayNumber param same time, choose only one"
 						}
@@ -1456,12 +1478,24 @@ function New-EWSMeeting {
 				}
 			}
 			
-			# Not tested...
-			# If $ImpersonateMailboxName is true, we create the appointement to another mailbox (the account must have the write access)
-			if ($ImpersonateMailboxName) {
-				$ImpersonatedUserId = New-Object Microsoft.Exchange.WebServices.Data.ImpersonatedUserId -ArgumentList ([Microsoft.Exchange.WebServices.Data.ConnectingIdType]::SmtpAddress), $ImpersonateMailboxName
+			
+			# If $ImpersonateMailbox is true, we create the appointement to another mailbox (the account must have the write access)
+			if ($ImpersonateMailbox) {
+				Write-Debug "Impersonate connexion"
+				# Not tested...
+				$ImpersonatedUserId = New-Object Microsoft.Exchange.WebServices.Data.ImpersonatedUserId -ArgumentList ([Microsoft.Exchange.WebServices.Data.ConnectingIdType]::SmtpAddress), $ImpersonateMailbox.Address
 				$Service.ImpersonatedUserId = $ImpersonatedUserId
+				$FolderId = New-Object Microsoft.Exchange.WebServices.Data.FolderId([Microsoft.Exchange.WebServices.Data.WellKnownFolderName]::Calendar)
+			} elseif ($DelegationMailbox) {
+				Write-Debug "Delegation connexion"
+				$FolderId = New-Object Microsoft.Exchange.WebServices.Data.FolderId([Microsoft.Exchange.WebServices.Data.WellKnownFolderName]::Calendar, $DelegationMailbox.Address)
+			} Else {
+				Write-Debug "local connexion"
+				$FolderId = New-Object Microsoft.Exchange.WebServices.Data.FolderId([Microsoft.Exchange.WebServices.Data.WellKnownFolderName]::Calendar)
 			}
+			
+			Write-Debug "Bind Calendar object"
+			$Calendar = [Microsoft.Exchange.WebServices.Data.Folder]::Bind($Service, $FolderId)
 		} Catch [system.ArgumentException]{
 			Throw [system.ArgumentException]$_.Exception.Message
 			Break
@@ -1472,6 +1506,7 @@ function New-EWSMeeting {
 	Process {
 		# Define Appointement
 		Try {
+			Write-Debug "Create New appointement"
 			# Mandatory Argument
 			$appointment = New-Object Microsoft.Exchange.WebServices.Data.Appointment($service)
 			$appointment.Subject = $Subject
@@ -1479,15 +1514,16 @@ function New-EWSMeeting {
 			if ($Body) {
 				$appointment.Body = $Body
 			}
-
+			
 			# Duration Meeting
+			$appointment.Start = $StartDate
 			if ($AllDay) {
 				$appointment.IsAllDayEvent = $True
 			} Else {
-				$appointment.Start = $StartDate
+				
 				$appointment.End = $EndDate
 			}
-
+			
 			# Optional Argument
 			if ($Location) {
 				$appointment.Location = $Location
@@ -1505,7 +1541,7 @@ function New-EWSMeeting {
 			}
 			
 			# If reccurence
-			If ($Recurrence) {
+			If ([string]::IsNullOrEmpty($Frequency)) {
 				# Set the appointement as reccurent event
 				$appointment.IsRecurring
 				
@@ -1517,7 +1553,7 @@ function New-EWSMeeting {
 							Write-Debug "Recurrence = Every Week Day"
 							$Day = [Microsoft.Exchange.WebServices.Data.DayOfTheWeek]::Weekday
 							$appointment.Recurrence = New-Object Microsoft.Exchange.WebServices.Data.Recurrence+WeeklyPattern($RecurrenceStart, $every, $Day)
-						} Elseif ($Every) {
+						} Else {
 							Write-Debug "Recurrence = Every $every Day"
 							$appointment.Recurrence = New-Object Microsoft.Exchange.WebServices.Data.Recurrence+DailyPattern($RecurrenceStart, $every)
 						}
@@ -1529,11 +1565,11 @@ function New-EWSMeeting {
 					}
 					'Monthly' {
 						# 2 case:
-						If ($DayNumber) {
+						If ($DayNumber -gt 0) {
 							# Day $DayNumber of every $every
 							Write-Debug "Recurrence = Day $DayNumber of every $every Month"
 							$appointment.Recurrence = New-Object Microsoft.Exchange.WebServices.Data.Recurrence+MonthlyPattern($RecurrenceStart, $every, $DayNumber)
-						} Elseif ($Week) {
+						} Elseif (-not [string]::IsNullOrEmpty($Week)) {
 							# The $week $day of every $every
 							Write-Debug "Recurrence = The $Week $Day of every $Every Month"
 							$appointment.Recurrence = New-Object Microsoft.Exchange.WebServices.Data.Recurrence+RelativeMonthlyPattern($RecurrenceStart, $Every, $Day, $Week)
@@ -1541,20 +1577,25 @@ function New-EWSMeeting {
 					}
 					'Yearly' {
 						#2 case:
-						If ($DayNumber) {
+						If ($DayNumber -gt 0) {
 							# On: $DayNumber $OfMonth
 							Write-Debug "Recurrence = On the $DayNumber of $OfMonth"
 							$appointment.Recurrence = New-Object Microsoft.Exchange.WebServices.Data.Recurrence+YearlyPattern($RecurrenceStart, $OfMonth, $DayNumber)
-						} Elseif ($Week) {
+						} Elseif (-not [string]::IsNullOrEmpty($Week)) {
 							# On the $Week $day of $ofmonth
 							Write-Debug "Recurrence = On the $Week $Day of $OfMonth"
+							
 							$appointment.Recurrence = New-Object Microsoft.Exchange.WebServices.Data.Recurrence+RelativeYearlyPattern($RecurrenceStart, $OfMonth, $Day, $Week)
 						}
+					}
+					Default {
+						Write-Host -ForegroundColor Red Switch default error	
 					}
 				} # End Switch
 				
 				
 				# Range of recurrence
+				Write-Debug "Define Range of recurrence"
 				#Define Start of ocurrence
 				$appointment.Recurrence.StartDate = $RecurrenceStart
 				
@@ -1563,13 +1604,16 @@ function New-EWSMeeting {
 				If ($NoEndDate) {
 					# No end date
 					$appointment.Recurrence.NeverEnds()
-				} Elseif ($EndAfterOccurence) {
+				} Elseif ($EndAfterOccurence -ne 0) {
 					# end after xx occurences
 					$appointment.Recurrence.NumberOfOccurrences = $EndAfterOccurence
 					$appointment.Recurrence.NumberOfOccurrences | Out-Host
 				} Elseif ($EndBy) {
 					# end by [datetime]
 					$appointment.Recurrence.EndDate = $EndBy
+				} Else {
+					Write-Debug "End Recurrence isn't been defined. we used default value : NoEndDate"
+					$appointment.Recurrence.NeverEnds()
 				}
 			}
 		} Catch {
@@ -1578,10 +1622,11 @@ function New-EWSMeeting {
 	}
 	End {
 		Try {
+			Write-Debug "Save appointement"
 			if ($RequiredAttendees -or $OptionalAttendees) {
-				$appointment.Save([Microsoft.Exchange.WebServices.Data.SendInvitationsMode]::SendToAllAndSaveCopy)
+				$appointment.Save($Calendar.Id, [Microsoft.Exchange.WebServices.Data.SendInvitationsMode]::SendToAllAndSaveCopy)
 			} Else {
-				$appointment.Save([Microsoft.Exchange.WebServices.Data.SendInvitationsMode]::SendToNone)
+				$appointment.Save($Calendar.Id, [Microsoft.Exchange.WebServices.Data.SendInvitationsMode]::SendToNone)
 			}
 		} Catch {
 			Write-Error $_.Exception.Message
